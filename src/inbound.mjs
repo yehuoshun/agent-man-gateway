@@ -7,6 +7,7 @@
 import { BLOCK_INBOUND, SUSPECT_INBOUND, LIMITS, TRUSTED } from "./rules.mjs"
 import { screenFile } from "./file.mjs"
 import { screenCompliance } from "./compliance.mjs"
+import { decodedVariants } from "./surface.mjs"
 
 // 不可见字符：零宽空格/连接符、BOM、双向覆盖（\u202e 能让"exe"显示成"txt"）
 const INVISIBLE = /[\u200b-\u200f\u2060\ufeff\u202a-\u202e\u2066-\u2069]/g
@@ -64,10 +65,21 @@ export function screenInbound(input) {
     return { verdict: "block", text: "", source, trust, flags: ["too-long:" + text.length] }
   }
 
-  // 两路判定：归一化串 + 压缩串（去掉所有非字母数字，治 "t o k e n" 这种字母间插空格）。
-  // 压缩串会打断英文词间空格，但英文规则在归一化串那一路照样命中，两者互补。
+  // 多路判定（政策点名了「拆字/谐音/编码/外语」四种规避手法）：
+  //   ① 归一化串  ② 压缩串（治 "t o k e n" 这种字母间插空格）
+  //   ③ 解码串（base64 / \uXXXX / \xNN / HTML 实体 / rot13）+ 其压缩形式
+  //   ④ 谐音替换串（yueyu → 越狱）
+  const variants = [text]
+  const add = (v) => {
+    if (v && !variants.includes(v) && variants.length < 6) variants.push(v)
+  }
   const compact = text.replace(/[^\u4e00-\u9fffa-zA-Z0-9]/g, "")
-  const variants = compact && compact !== text ? [text, compact] : [text]
+  if (compact && compact !== text) add(compact)
+  for (const d of decodedVariants(text)) {
+    const nd = normalizeForMatch(d)
+    add(nd)
+    add(nd.replace(/[^\u4e00-\u9fffa-zA-Z0-9]/g, ""))
+  }
 
   // 内容合规先判：这类内容一旦上行，封的是中转账号——不隔离、不分来源，整条拒
   const compliance = screenCompliance(text, variants)
