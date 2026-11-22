@@ -1,0 +1,21 @@
+{
+  "name": "agent-man-gateway",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "agent-man 的门口：入站降级 + 出站合规闸 + 唯一发送出口",
+  "engines": {
+    "node": ">=20"
+  },
+  "main": "./src/index.mjs",
+  "exports": {
+    ".": "./src/index.mjs"
+  },
+  "bin": {
+    "agent-man-gateway": "./bin/agent-man-gateway.mjs"
+  },
+  "scripts": {
+    "test": "node --test test/"
+  },
+  "license": "MIT"
+}
