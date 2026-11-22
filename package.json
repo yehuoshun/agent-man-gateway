@@ -15,7 +15,7 @@
     "agent-man-gateway": "./bin/agent-man-gateway.mjs"
   },
   "scripts": {
-    "test": "node --test test/"
+    "test": "node --test"
   },
   "license": "MIT"
 }
