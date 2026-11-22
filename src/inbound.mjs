@@ -6,6 +6,7 @@
 // 归一化只用于判定，交给下游的仍然是原文——代码缩进、格式、emoji 一个字节都不动。
 import { BLOCK_INBOUND, SUSPECT_INBOUND, LIMITS, TRUSTED } from "./rules.mjs"
 import { screenFile } from "./file.mjs"
+import { screenCompliance } from "./compliance.mjs"
 
 // 不可见字符：零宽空格/连接符、BOM、双向覆盖（\u202e 能让"exe"显示成"txt"）
 const INVISIBLE = /[\u200b-\u200f\u2060\ufeff\u202a-\u202e\u2066-\u2069]/g
@@ -63,16 +64,30 @@ export function screenInbound(input) {
     return { verdict: "block", text: "", source, trust, flags: ["too-long:" + text.length] }
   }
 
+  // 两路判定：归一化串 + 压缩串（去掉所有非字母数字，治 "t o k e n" 这种字母间插空格）。
+  // 压缩串会打断英文词间空格，但英文规则在归一化串那一路照样命中，两者互补。
+  const compact = text.replace(/[^\u4e00-\u9fffa-zA-Z0-9]/g, "")
+  const variants = compact && compact !== text ? [text, compact] : [text]
+
+  // 内容合规先判：这类内容一旦上行，封的是中转账号——不隔离、不分来源，整条拒
+  const compliance = screenCompliance(text, variants)
+  if (compliance.hit) {
+    return {
+      verdict: "block",
+      text: "",
+      source,
+      trust,
+      flags: ["compliance:" + compliance.hit, ...flags.filter((f) => f !== "normalized")],
+      excerpt: compliance.excerpt,
+    }
+  }
+
   const urlCount = (text.match(SUSPECT_INBOUND.urls) ?? []).length
   if (urlCount > LIMITS.urlsPerMessage) {
     return { verdict: "block", text: "", source, trust, flags: ["url-flood:" + urlCount] }
   }
 
   // 硬拦：只回一个原因码，原文不往下传（连日志里也只用长度摘要）
-  // 两路判定：归一化串 + 压缩串（去掉所有非字母数字，治 "t o k e n" 这种字母间插空格）。
-  // 压缩串会打断英文词间空格，但英文规则在归一化串那一路照样命中，两者互补。
-  const compact = text.replace(/[^\u4e00-\u9fffa-zA-Z0-9]/g, "")
-  const variants = compact && compact !== text ? [text, compact] : [text]
   for (const variant of variants) {
     for (const [key, re] of Object.entries(BLOCK_INBOUND)) {
       re.lastIndex = 0

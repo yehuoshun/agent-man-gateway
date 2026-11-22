@@ -1,6 +1,7 @@
 // 出站：一刀切。回复里命中任何一条过滤规则就不发——不打码、不改写、不猜意图。
 // 简单粗暴的理由：打码会把一句本来该拦的话变成"看起来能发"的话，留个半成品出去比不发更危险。
 import { REPLY_BLOCK, LIMITS } from "./rules.mjs"
+import { screenCompliance } from "./compliance.mjs"
 
 // 高熵串：不认格式、只认"像不像随机串"，兜住所有没进规则表的新凭据形态。
 // 纯十六进制串不算（提交 SHA、对象 ID、UUID 都长这样），这类靠前缀规则兜。
@@ -24,6 +25,12 @@ export function screenOutbound(input) {
   if (!text.trim()) return { verdict: "block", text: "", flags: ["empty"] }
   if (text.length > LIMITS.outboundChars) {
     return { verdict: "block", text: "", flags: ["too-long:" + text.length] }
+  }
+
+  // 回复里带违规内容，发到微信/QQ 一样会把平台账号搭进去——先判合规
+  const compliance = screenCompliance(text)
+  if (compliance.hit) {
+    return { verdict: "block", text: "", flags: ["compliance:" + compliance.hit] }
   }
 
   for (const [key, re] of Object.entries(REPLY_BLOCK)) {
