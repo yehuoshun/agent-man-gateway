@@ -3,12 +3,12 @@
 //   · 不做隔离块（隔离只是换个说法，原文照样上行）
 //   · 不区分来源（boss 自己发的也拦，号是同一个号）
 //   · 宁可错杀（少回一句是体验问题，漏一句可能是没号）
-import { COMPLIANCE_BLOCK, COMPLIANCE_CUSTOM } from "./rules.mjs"
+import { COMPLIANCE_BLOCK, COMPLIANCE_POLICY, COMPLIANCE_CUSTOM } from "./rules.mjs"
 
-export const COMPLIANCE = COMPLIANCE_BLOCK
+export const COMPLIANCE = { ...COMPLIANCE_BLOCK, ...Object.fromEntries(COMPLIANCE_POLICY) }
 
 function entries() {
-  return [...Object.entries(COMPLIANCE_BLOCK), ...COMPLIANCE_CUSTOM]
+  return [...Object.entries(COMPLIANCE_BLOCK), ...COMPLIANCE_POLICY, ...COMPLIANCE_CUSTOM]
 }
 
 // 在传入的所有文本变体（归一化串 / 压缩串）上判，任一命中即返回
