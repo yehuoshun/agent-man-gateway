@@ -1,11 +1,12 @@
-// 出站：确定性闸门。两种场合两套默认值——
-// public（群聊/公开）拦不住就拒；private（一对一）拦不住放行，但打码并记日志。
-import { OUTBOUND, LIMITS, MASK } from "./rules.mjs"
+// 出站：确定性闸门。两件事——过滤能不能发（打码/拦截）、过滤是不是答非所问。
+// 场合决定默认值：public 拦不住就拒；private 拦不住也拒，但只在答非所问上放宽。
+import { OUTBOUND, LIMITS, MASK, relatedness } from "./rules.mjs"
 
-const HARD = ["atAll"]
+const ACK = /^(?:好|好的|嗯|嗯嗯|行|可以|收到|明白|好嘞|ok|okay|yes|no|对|是的)[。.!！~ ]*$/i
 
 export function screenOutbound(input) {
   const scope = input?.scope === "public" ? "public" : "private"
+  const anchor = input?.anchor
   let text = String(input?.text ?? "")
   const flags = []
 
@@ -14,17 +15,27 @@ export function screenOutbound(input) {
     return { verdict: "block", text: "", scope, flags: ["too-long:" + text.length] }
   }
 
-  // 公开场合的硬拦：这些不是"打码能救"的东西
-  for (const key of HARD) {
-    if (OUTBOUND[key].test(text)) {
-      OUTBOUND[key].lastIndex = 0
-      if (scope === "public") return { verdict: "block", text: "", scope, flags: ["blocked:" + key] }
-      flags.push("warn:" + key)
+  // 相关性：回复接没接住被回复的那句话（短应答豁免）
+  const plain = text.replace(/\s/g, "")
+  if (anchor && plain.length > LIMITS.shortReplyChars && !ACK.test(plain)) {
+    const score = relatedness(text, anchor)
+    if (score < LIMITS.minRelevance) {
+      if (scope === "public") return { verdict: "block", text: "", scope, flags: ["off-topic:" + score.toFixed(2)] }
+      flags.push("warn:off-topic:" + score.toFixed(2))
+    } else {
+      flags.push("related:" + score.toFixed(2))
     }
-    OUTBOUND[key].lastIndex = 0
   }
 
-  // 打码类：凭据、路径、手机号、邮箱
+  // 公开场合的硬拦：这些不是"打码能救"的东西
+  OUTBOUND.atAll.lastIndex = 0
+  if (OUTBOUND.atAll.test(text)) {
+    OUTBOUND.atAll.lastIndex = 0
+    if (scope === "public") return { verdict: "block", text: "", scope, flags: ["blocked:atAll"] }
+    flags.push("warn:atAll")
+  }
+  OUTBOUND.atAll.lastIndex = 0
+
   for (const key of ["secret", "bearer", "path", "phone", "email"]) {
     const hits = text.match(OUTBOUND[key])
     if (!hits) continue
@@ -32,7 +43,6 @@ export function screenOutbound(input) {
     flags.push("masked:" + key + ":" + hits.length)
   }
 
-  // 标记类：不拦，只记账
   for (const key of ["sysPromptHint", "promise"]) {
     const hits = text.match(OUTBOUND[key])
     if (hits) flags.push("flagged:" + key + ":" + hits.length)

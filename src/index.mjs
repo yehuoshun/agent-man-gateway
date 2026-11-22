@@ -1,4 +1,5 @@
 export { screenInbound } from "./inbound.mjs"
 export { screenOutbound } from "./outbound.mjs"
 export { authorize, send } from "./send.mjs"
-export { INBOUND, OUTBOUND, LIMITS, MASK } from "./rules.mjs"
+export { relatedness } from "./relevance.mjs"
+export { BLOCK_INBOUND, SUSPECT_INBOUND, OUTBOUND, LIMITS, MASK, TRUSTED } from "./rules.mjs"

@@ -1,6 +1,5 @@
-// 入站：把外面进来的东西降级成数据。这里不做语义判断，只做三件事——
-// 截断超长、剥控制字符、包进隔离块并标注来源与 trust。指令性说法只记标记，不拦。
-import { INBOUND, LIMITS } from "./rules.mjs"
+// 入站：先拦，再降级。命中硬规则的整条不进上下文——拦了还带进去等于没拦。
+import { BLOCK_INBOUND, SUSPECT_INBOUND, LIMITS, TRUSTED } from "./rules.mjs"
 
 function escapeClose(text) {
   // 防止外部内容提前闭合隔离块（否则它就能"跳出"数据层）
@@ -14,33 +13,43 @@ export function screenInbound(input) {
   const flags = []
 
   if (!raw.trim()) return { verdict: "block", text: "", source, trust, flags: ["empty"] }
-
-  let text = raw.replace(INBOUND.control, "")
-  if (text.length !== raw.length) flags.push("control-chars-stripped")
-
-  let truncated = false
-  if (text.length > LIMITS.inboundChars) {
-    text = text.slice(0, LIMITS.inboundChars)
-    truncated = true
-    flags.push("truncated")
+  if (raw.length > LIMITS.inboundChars) {
+    return { verdict: "block", text: "", source, trust, flags: ["too-long:" + raw.length] }
   }
 
-  const count = (re) => (text.match(re) ?? []).length
-
-  const instruction = count(INBOUND.instructionLike)
-  if (instruction) flags.push("instruction-like:" + instruction)
-  const identity = count(INBOUND.identityClaim)
-  if (identity) flags.push("identity-claim:" + identity)
-  const urls = count(INBOUND.urls)
-  if (urls) flags.push("url:" + urls)
-  if (urls > LIMITS.urlsPerMessage) flags.push("url-flood")
-
-  // 可信来源：不包隔离块，直接原样交出去（仍受过长度约束）
-  if (INBOUND.trusted.has(trust)) {
-    return { verdict: "pass", text, source, trust, flags, truncated }
+  const urlCount = (raw.match(SUSPECT_INBOUND.urls) ?? []).length
+  if (urlCount > LIMITS.urlsPerMessage) {
+    return { verdict: "block", text: "", source, trust, flags: ["url-flood:" + urlCount] }
   }
 
-  const body = escapeClose(text)
-  const wrapped = '<外部内容 source="' + source + '" trust="untrusted">\n' + body + "\n</外部内容>"
-  return { verdict: "degrade", text: wrapped, source, trust, flags, truncated }
+  // 硬拦：只回一个原因码，原文不往下传（连日志里也只用长度摘要）
+  for (const [key, re] of Object.entries(BLOCK_INBOUND)) {
+    re.lastIndex = 0
+    const m = raw.match(re)
+    re.lastIndex = 0
+    if (m) {
+      return {
+        verdict: "block",
+        text: "",
+        source,
+        trust,
+        flags: ["blocked:" + key + ":" + m.length],
+        excerpt: String(m[0]).slice(0, 12),
+      }
+    }
+  }
+
+  const text = raw
+
+  const selfAsk = (text.match(SUSPECT_INBOUND.askAboutSelf) ?? []).length
+  if (selfAsk) flags.push("ask-about-self:" + selfAsk)
+  if (urlCount) flags.push("url:" + urlCount)
+
+  // 可信来源：不包隔离块，原样交出去
+  if (TRUSTED.has(trust)) {
+    return { verdict: "pass", text, source, trust, flags }
+  }
+
+  const wrapped = '<外部内容 source="' + source + '" trust="untrusted">\n' + escapeClose(text) + "\n</外部内容>"
+  return { verdict: "quarantine", text: wrapped, source, trust, flags }
 }
