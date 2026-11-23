@@ -7,29 +7,8 @@
 import { BLOCK_INBOUND, SUSPECT_INBOUND, LIMITS, TRUSTED } from "./rules.mjs"
 import { screenFile } from "./file.mjs"
 import { screenCompliance } from "./compliance.mjs"
-import { decodedVariants } from "./surface.mjs"
-
-// 不可见字符：零宽空格/连接符、BOM、双向覆盖（\u202e 能让"exe"显示成"txt"）
-const INVISIBLE = /[\u200b-\u200f\u2060\ufeff\u202a-\u202e\u2066-\u2069]/g
-// 中文字之间插入的空白与标点：压缩掉，直到不再变化（防"忽 ，略 ，之 ，前"这种连插）
-const CJK_GAP = /([\u4e00-\u9fff])[\s，,、。．.;；:：!！?？~～\-—_|/\\]+(?=[\u4e00-\u9fff])/g
-// 「i g n o r e」这种把单词拆成单字母的写法：还原成一个词（只动空白，不动中文字间标点）
-const LETTER_GAP = /(?:^|\s)((?:[A-Za-z0-9]\s+){2,}[A-Za-z0-9])(?=\s|$)/g
-// 「a，d，m，i，n」这种用中文标点拆拉丁字母的写法：先把标点抽掉再判
-const PUNCT_GAP = /(?:[A-Za-z0-9][，,、。．;；：]){2,}[A-Za-z0-9]/g
-
-export function normalizeForMatch(text) {
-  let t = String(text ?? "").normalize("NFKC").replace(INVISIBLE, "")
-  t = t.replace(LETTER_GAP, (m, run) => m.replace(run, run.replace(/\s+/g, " ")))
-  let prev
-  do {
-    prev = t
-    t = t.replace(CJK_GAP, "$1")
-    t = t.replace(LETTER_GAP, (m, run) => m.replace(run, run.replace(/\s+/g, "")))
-    t = t.replace(PUNCT_GAP, (m) => m.replace(/[，,、。．;；：]/g, ""))
-  } while (t !== prev)
-  return t
-}
+// 归一化与变体生成只有一处实现（surface.mjs），入站与出站共用同一份
+import { INVISIBLE, normalizeForMatch, matchVariants } from "./surface.mjs"
 
 function escapeClose(text) {
   // 防止外部内容提前闭合隔离块（否则它就能"跳出"数据层）
@@ -65,21 +44,11 @@ export function screenInbound(input) {
     return { verdict: "block", text: "", source, trust, flags: ["too-long:" + text.length] }
   }
 
-  // 多路判定（政策点名了「拆字/谐音/编码/外语」四种规避手法）：
-  //   ① 归一化串  ② 压缩串（治 "t o k e n" 这种字母间插空格）
-  //   ③ 解码串（base64 / \uXXXX / \xNN / HTML 实体 / rot13）+ 其压缩形式
-  //   ④ 谐音替换串（yueyu → 越狱）
-  const variants = [text]
-  const add = (v) => {
-    if (v && !variants.includes(v) && variants.length < 6) variants.push(v)
-  }
-  const compact = text.replace(/[^\u4e00-\u9fffa-zA-Z0-9]/g, "")
-  if (compact && compact !== text) add(compact)
-  for (const d of decodedVariants(text)) {
-    const nd = normalizeForMatch(d)
-    add(nd)
-    add(nd.replace(/[^\u4e00-\u9fffa-zA-Z0-9]/g, ""))
-  }
+  // 多路判定（政策点名了「拆字/谐音/编码/外语」四种规避手法），变体由 surface.mjs 统一产出：
+  //   ① 归一化串（全折叠）  ② 保留词边界的折叠串  ③ 压缩串（去掉空白与标点）
+  //   ④ 解码串（base64 / \uXXXX / \xNN / HTML 实体 / rot13）+ 其压缩形式  ⑤ 谐音替换串（yueyu → 越狱）
+  // 不设名额：所有变体都要过所有规则。
+  const variants = matchVariants(raw)
 
   // 内容合规先判：这类内容一旦上行，封的是中转账号——不隔离、不分来源，整条拒
   const compliance = screenCompliance(text, variants)
