@@ -67,5 +67,5 @@ export function screenOutbound(input) {
     }
   }
 
-  return { verdict: "pass", text, flags }
+  return { verdict: "pass", text, flags: [] }
 }

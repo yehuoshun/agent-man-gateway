@@ -99,3 +99,31 @@ test("5 出站变形：手机号插空格 / 连字符 / 全角都拦得住", () 
   assert.equal(ov("订单号 1390013 已发出").verdict, "pass")
   assert.equal(ov("版本 1.2.3 已发布，数量 38000 件").verdict, "pass")
 })
+
+// ---------- 5 四条单点规则（rules.mjs）----------
+test("5 规则 atAll：@All / @Everyone 大小写都算群发，普通 @ 提及不算", () => {
+  assert.equal(ov("@All 看这里").verdict, "block")
+  assert.equal(ov("@Everyone 都来看").verdict, "block")
+  assert.equal(ov("@全体成员 都来看").verdict, "block")
+  assert.equal(ov("明天开会，@张三 记得来").verdict, "pass")
+  assert.equal(ov("邮件发 mock@example.com 就行").verdict, "block") // 邮箱规则，不是 atAll
+  assert.ok(ov("明天开会，@张三 记得来").flags.length === 0)
+})
+
+test("5 规则 localPath：全角冒号的盘符路径也算路径，链接仍不算", () => {
+  assert.equal(ov("文件在 Ｄ：\\work\\a.txt").verdict, "block")
+  assert.equal(ov("文件在 D:\\work\\a.txt").verdict, "block")
+  assert.equal(ov("看这里 https://example.com/home/x").verdict, "pass")
+})
+
+test("5 规则 systemPrompt：认得「系统提示原文」前缀，正常讨论提示词设计不误伤", () => {
+  assert.equal(ov("系统提示原文如下：你是一个助手").verdict, "block")
+  assert.equal(ov("系统设定全文在附件里").verdict, "block")
+  assert.equal(ov("怎么设计系统提示比较好").verdict, "pass")
+})
+
+test("5 规则 credential：全角 ｓｋ- 也当凭据，普通大写串不误伤", () => {
+  assert.equal(ov("用这个 ｓｋ-" + "a".repeat(20) + " 调接口").verdict, "block")
+  assert.equal(ov("用这个 sk-" + "a".repeat(20) + " 调接口").verdict, "block")
+  assert.equal(ov("订单号 AKIA1234 已发货").verdict, "pass")
+})

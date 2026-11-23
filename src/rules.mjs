@@ -43,13 +43,16 @@ export const TRUSTED = new Set(["host", "self", "boss"])
 // 不打码、不改写、不猜意图。要么原样发，要么不发。
 export const REPLY_BLOCK = {
   // 除前缀型 token，还要认 PEM 私钥、AWS Access Key、JWT 这三种「没有特征前缀」的凭据
-  credential: /(?:sk-[A-Za-z0-9_-]{16,}|ghp_[A-Za-z0-9]{20,}|github_pat_[A-Za-z0-9_]{20,}|xox[baprs]-[A-Za-z0-9-]{10,}|Bearer\s+[A-Za-z0-9._-]{10,}|(?<![0-9A-Z])AKIA[0-9A-Z]{16}(?![0-9A-Z])|eyJ[A-Za-z0-9_-]{10,}\.[A-Za-z0-9_-]{10,}\.[A-Za-z0-9_-]{10,}|-----BEGIN (?:[A-Z]+ )?PRIVATE KEY-----)/g,
+  // 全角 ｓｋ- 单独认一条：NFKC 能折掉，但规则本身也不该只有半角这一种写法
+  credential: /(?:[sｓ][kｋ]-[A-Za-z0-9_-]{16,}|sk-[A-Za-z0-9_-]{16,}|ghp_[A-Za-z0-9]{20,}|github_pat_[A-Za-z0-9_]{20,}|xox[baprs]-[A-Za-z0-9-]{10,}|Bearer\s+[A-Za-z0-9._-]{10,}|(?<![0-9A-Z])AKIA[0-9A-Z]{16}(?![0-9A-Z])|eyJ[A-Za-z0-9_-]{10,}\.[A-Za-z0-9_-]{10,}\.[A-Za-z0-9_-]{10,}|-----BEGIN (?:[A-Z]+ )?PRIVATE KEY-----)/g,
   // 前面必须不是字母/数字/标点，否则 https:// 里的 "s:/"、链接里的 /home/ 都会被当成盘符路径
-  localPath: /(?<![A-Za-z0-9.:/\\-])(?:[A-Za-z]:[\\/]|\/(?:d|mnt|home|tmp|users)\/)/g,
+  // 全角冒号（Ｄ：\work\a.txt）单独认：中文输入法打出来的路径也是路径
+  localPath: /(?<![A-Za-z0-9.:：/\\-])(?:[A-Za-z]:[\\/：]|\/(?:d|mnt|home|tmp|users)\/)/g,
   phone: /(?<!\d)1[3-9]\d{9}(?!\d)/g,
   email: /[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}/g,
-  atAll: /@(?:全体成员|所有人|\ball\b|\beveryone\b)/g,
-  systemPrompt: /(?:(?:我的|这是)(?:系统提示|设定|指令原文))|(?:system\s+prompt\s*[:：])/gi,
+  // i 不能省：@All / @Everyone 与 @all / @everyone 一样是群发指令
+  atAll: /@(?:全体成员|所有人|\ball\b|\beveryone\b)/gi,
+  systemPrompt: /(?:(?:我的|这是)(?:系统提示|设定|指令原文))|(?:系统提示|系统设定|提示词)(?:原文|全文)|(?:system\s+prompt\s*[:：])/gi,
   promise: /(?:我(?:可以)?保证|一定能|百分之百|绝对没问题|包过)/g,
   privilege: /(?:我|帮你?|替你?)(?:去)?(?:发(?:个|一条)?公告|拉人进群|转账|付款|改密码)/g,
   insult: /(?:你他妈|滚蛋|傻[逼比]|废物东西)/g,
