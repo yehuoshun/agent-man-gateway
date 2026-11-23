@@ -127,3 +127,14 @@ test("5 规则 credential：全角 ｓｋ- 也当凭据，普通大写串不误�
   assert.equal(ov("用这个 sk-" + "a".repeat(20) + " 调接口").verdict, "block")
   assert.equal(ov("订单号 AKIA1234 已发货").verdict, "pass")
 })
+
+// ---------- 4 4000 字上限量的却是归一化后长度 ----------
+test("4 长度上限按原文量：插空格塞不进去，正常的长度也不误伤", () => {
+  const sneaky = "字 ".repeat(2100) // 原文 4200 字，归一化后 2100 字
+  const r = iv(sneaky)
+  assert.equal(r.verdict, "block")
+  assert.ok(r.flags.some((f) => f === "too-long:4200"), JSON.stringify(r.flags))
+  // 反例：原文没超限的长消息照旧放行（隔离下发）
+  assert.equal(iv("字 ".repeat(1900)).verdict, "quarantine")
+  assert.equal(iv("字".repeat(4000)).verdict, "quarantine")
+})

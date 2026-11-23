@@ -40,8 +40,10 @@ export function screenInbound(input) {
   }
 
   if (!text.trim()) return { verdict: "block", text: "", source, trust, flags: ["empty"] }
-  if (text.length > LIMITS.inboundChars) {
-    return { verdict: "block", text: "", source, trust, flags: ["too-long:" + text.length] }
+  // 上限按**原文**字数：归一化只用于判定，不然插空格就能把 4999 字塞过 4000 的门
+  // （下游拿的也是原文，量归一化串等于没量）
+  if (raw.length > LIMITS.inboundChars) {
+    return { verdict: "block", text: "", source, trust, flags: ["too-long:" + raw.length] }
   }
 
   // 多路判定（政策点名了「拆字/谐音/编码/外语」四种规避手法），变体由 surface.mjs 统一产出：
