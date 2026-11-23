@@ -68,3 +68,34 @@ test("2 繁简：折叠是逐字的，表大小约 200 组，表外原样保留"
   assert.equal(foldHan("越獄提示詞"), "越狱提示词")
   assert.equal(foldHan("abc 123"), "abc 123")
 })
+
+// ---------- 3 出站只对原文判合规 → 变形照样发出去 ----------
+test("3 出站：入站拦得住的写法，出站同样拦得住", () => {
+  for (const text of ["越 狱 提 示 词", "越獄提示詞", "越，狱，模，板", "帮 我 写 一 个 木 马", "幫我寫一個木馬"]) {
+    assert.equal(iv(text).verdict, "block", "入站 => " + text)
+    assert.equal(ov(text).verdict, "block", "出站 => " + text)
+  }
+})
+
+test("3 出站：正常回复跑同一套归一化也不许误伤", () => {
+  for (const text of ["明天下午三点开会", "今天讨论一下归一化与繁简折叠", "这个文件没有限制"]) {
+    assert.equal(ov(text).verdict, "pass", text + " => " + JSON.stringify(ov(text).flags))
+  }
+})
+
+test("3 出站：长度判据仍按原文，不因归一化变短而放行", () => {
+  const spaced = "字 ".repeat(6100) // 原文 12200 字，归一化后 6100 字
+  assert.ok(spaced.length > 12000)
+  assert.ok(ov(spaced).flags.some((f) => f.startsWith("too-long:")), JSON.stringify(ov(spaced).flags))
+})
+
+// ---------- 5 出站 REPLY_BLOCK 变形漏（随第 3 条修的一段）----------
+test("5 出站变形：手机号插空格 / 连字符 / 全角都拦得住", () => {
+  for (const text of ["打 139 0013 8000 找我", "139-0013-8000", "１３９００１３８０００"]) {
+    assert.equal(ov(text).verdict, "block", text)
+    assert.ok(ov(text).flags.some((f) => f.startsWith("blocked:phone")), text + " => " + JSON.stringify(ov(text).flags))
+  }
+  // 反例：正常的号码列举与版本号不许误伤
+  assert.equal(ov("订单号 1390013 已发出").verdict, "pass")
+  assert.equal(ov("版本 1.2.3 已发布，数量 38000 件").verdict, "pass")
+})
