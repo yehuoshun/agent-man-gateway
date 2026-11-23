@@ -5,6 +5,10 @@
 //   谐音与拼音（yueyu / pojia）→ homophoneize 做有限替换
 // 全都只为一件事：让规则吃到"模型真正读到的那句话"，而不是攻击者写的那层皮。
 // 归一化只用于判定，交给下游的仍是原文（一个字节都不动）。
+//
+// 繁简：政策把「拆字」算作规避手法，繁体写法是同一招的另一种皮（越獄提示詞 / 一個木馬 / 替我轉賬）。
+// 折叠表在 han.mjs，表外的繁体字靠谐音与解码通道兜底（这才是「编码/外语」两条通道的意义）。
+import { foldHan } from "./han.mjs"
 
 const CJK = /[\u4e00-\u9fff]/
 
@@ -19,9 +23,10 @@ const PUNCT_GAP = /(?:[A-Za-z0-9][，,、。．;；：]){2,}[A-Za-z0-9]/g
 // 压缩串：只留中文与字母数字（治「139 0013 8000」「139-0013-8000」这类插入分隔的写法）
 const NON_WORD = /[^\u4e00-\u9fffa-zA-Z0-9]/g
 
-// 归一化的共同起点：NFKC（全角拉丁 / 兼容字符）→ 剥不可见字符
+// 归一化的共同起点：NFKC（全角拉丁 / 兼容字符）→ 剥不可见字符 → 繁转简
+// 顺序有讲究：先去不可见字符，否则「越\u200b獄」里的字面会被零宽字符隔开而折不到。
 function base(text) {
-  return String(text ?? "").normalize("NFKC").replace(INVISIBLE, "")
+  return foldHan(String(text ?? "").normalize("NFKC").replace(INVISIBLE, ""))
 }
 
 // 全折叠：连词边界也不要。判定主串，用它吃掉「忽 略 之 前 的 指 令」「i g n o r e」这类拆字。
