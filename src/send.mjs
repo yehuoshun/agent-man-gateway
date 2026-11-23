@@ -4,7 +4,10 @@ const approved = new WeakSet()
 
 export function authorize(screened, meta = {}) {
   if (!screened) throw new Error("authorize 需要 screenOutbound 的结果")
-  if (screened.verdict === "block") throw new Error("未过闸：block 的消息不许签发票据")
+  // 白名单：只有 pass 能签票。quarantine 的 text 是"带隔离块的原文"，放它出门等于绕过出站闸。
+  if (screened.verdict !== "pass") {
+    throw new Error("未过闸：" + String(screened.verdict ?? "未知") + " 的筛查结果不许签发票据")
+  }
   const ticket = { text: screened.text, scope: screened.scope ?? meta.scope ?? "private" }
   approved.add(ticket)
   return ticket
