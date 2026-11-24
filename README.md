@@ -151,7 +151,26 @@ node bin/agent-man-gateway.mjs outbound --text "文件在 D:\\work\\a.txt"
 node bin/agent-man-gateway.mjs file --name "报告.pdf" --trust boss   # 一律拒，boss 发的也拒
 ```
 
-退出码：0 放行，1 拒，2 用法错。
+退出码：0 放行，1 拒，64 用法错（参数写错、开关拼错、`--text` 后面没跟值都算 64，
+不许静默降级成"用默认值继续跑"）。
+
+## 当 agent-man 的零件用
+
+网关也长着 `agent-man`（design.md §8）要的那张脸，所以它能被当成一个零件挂进去：
+
+```
+node bin/agent-man-gateway.mjs            # 无参：只读答一行，退 0
+node bin/agent-man-gateway.mjs --describe # 五个字段，退 0
+```
+
+`--describe` 回 `{"name":"gateway","desc":"…","section":"网关","timeout_ms":5000,"side_effects":false}`。
+`side_effects` 写 false 是实话：网关只读参数、判一遍、打印，不写盘、不联网、不留状态——
+所以它随时可以被问，也随时可以被丢下不管。
+
+零件侧的几条规矩：stdout 只放结果、不超 8KB（超了按比例砍短并标 `truncated: true`，
+整体仍是合法 JSON），日志一律走 stderr，一次进程只干一件事、问完就退。
+Windows 上靠 `bin/agent-man-gateway.cmd` 被发现——`parts.scan` 只认 `.exe/.cmd/.bat`，
+只放一个 `.mjs` 它根本看不见你。
 
 ## 发送唯一出口
 
@@ -181,4 +200,6 @@ send(ticket, (text) => transport(text))     // 票据一次性，发过作废
 npm test
 ```
 
-66 条（含变体矩阵回归、合规九类、破甲/越狱政策对照、以及禁止内容 12 类逐条对照：注入句插零宽/空格/标点/全角都必须仍拦住，正常话同样变形必须仍放行），零依赖，Node >= 20，一次性进程。
+用例覆盖变体矩阵回归、合规九类、破甲/越狱政策对照、禁止内容 12 类逐条对照、命令行退出码与取参、
+以及"当零件用"的三条契约（无参一行、`--describe` 五字段、stdout 超 8KB 要标 `truncated`）。
+注入句插零宽/空格/标点/全角/繁体都必须仍拦住，正常话同样变形必须仍放行。零依赖，Node >= 20，一次性进程。
